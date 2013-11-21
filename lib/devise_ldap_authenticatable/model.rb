@@ -18,7 +18,9 @@ module Devise
       end
 
       def login_with
-        @login_with ||= Devise.mappings[self.class.to_s.underscore.to_sym].to.authentication_keys.first
+       #@login_with ||= Devise.mappings[self.class.to_s.underscore.to_sym].to.authentication_keys.first
+        @login_with ||= Devise.mappings[:user].to.authentication_keys.first
+        # puts "LdapAuthenticatable::login_with >>#{@login_with.inspect}"
         self[@login_with]
       end
 
@@ -42,6 +44,7 @@ module Devise
 
       # Checks if a resource is valid upon authentication.
       def valid_ldap_authentication?(password)
+        # puts "LdapAuthenticatable::valid_ldap_authentication >> #{Devise::LdapAdapter.valid_credentials?(login_with, password)}"
         if Devise::LdapAdapter.valid_credentials?(login_with, password)
           return true
         else
@@ -85,18 +88,30 @@ module Devise
 
           # resource = find_for_ldap_authentication(conditions)
           resource = where(auth_key => auth_key_value).first
-
+          # puts "LdapAuthenticatable::resourcein at the begining >> #{resource.inspect}"
           if (resource.blank? and ::Devise.ldap_create_user)
             resource = new
             resource[auth_key] = auth_key_value
             resource.password = attributes[:password]
           end
-
+          
           if resource.try(:valid_ldap_authentication?, attributes[:password])
             if resource.new_record?
               resource.ldap_before_save if resource.respond_to?(:ldap_before_save)
+              #set_email from ldap parameter    
+              options = {:login => auth_key_value,
+                 :password => attributes[:password].to_s,
+                 :ldap_auth_username_builder => ::Devise.ldap_auth_username_builder,
+                 :admin => ::Devise.ldap_use_admin_to_bind}
+              res = Devise::LdapAdapter::LdapConnect.new(options)
+              res.authenticate!
+              resource.email = res.ldap_param_value('mail')
+              # TODO: set type parameter
+
               resource.save
+              # puts "LdapAuthenticatable::resource save >> #{resource.errors.inspect}"
             end
+            # puts "LdapAuthenticatable::resource in_the_end >> #{resource.inspect}"
             return resource
           else
             return nil

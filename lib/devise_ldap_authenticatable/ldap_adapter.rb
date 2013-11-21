@@ -11,6 +11,9 @@ module Devise
                  :admin => ::Devise.ldap_use_admin_to_bind}
 
       resource = LdapConnect.new(options)
+      # DeviseLdapAuthenticatable::Logger.send("self.valid_credentials?:: \n password -> #{password_plaintext} login -> #{login}")    
+      # DeviseLdapAuthenticatable::Logger.send("self.valid_credentials?:: \n resource #{resource.inspect}")
+      # DeviseLdapAuthenticatable::Logger.send("self.valid_credentials?:: \n autho #{resource.authorized?}")
       resource.authorized?
     end
 
@@ -32,6 +35,9 @@ module Devise
       options = {:login => login,
                  :ldap_auth_username_builder => ::Devise.ldap_auth_username_builder,
                  :admin => ::Devise.ldap_use_admin_to_bind}
+
+      # DeviseLdapAuthenticatable::Logger.send("self.ldap_connect:: \n login -> #{login}" )     
+      # DeviseLdapAuthenticatable::Logger.send("self.ldap_connect:: \n resource #{LdapConnect.new(options).inspect}")
 
       resource = LdapConnect.new(options)
     end
@@ -72,6 +78,8 @@ module Devise
 
     def self.get_ldap_param(login,param)
       resource = self.ldap_connect(login)
+      # DeviseLdapAuthenticatable::Logger.send("self.get_ldap_param:: \n login -> #{login}   param #{param} value -> #{resource.ldap_param_value(param)}"  )    
+      # DeviseLdapAuthenticatable::Logger.send("self.get_ldap_param:: \n resource #{LdapConnect.new(options).inspect}")
       resource.ldap_param_value(param)
     end
 
@@ -88,7 +96,7 @@ module Devise
         ldap_options = params
         ldap_config["ssl"] = :simple_tls if ldap_config["ssl"] === true
         ldap_options[:encryption] = ldap_config["ssl"].to_sym if ldap_config["ssl"]
-
+        # puts "Initialize >> options -> #{ldap_options.inspect}"
         @ldap = Net::LDAP.new(ldap_options)
         @ldap.host = ldap_config["host"]
         @ldap.port = ldap_config["port"]
@@ -96,12 +104,17 @@ module Devise
         @attribute = ldap_config["attribute"]
         @ldap_auth_username_builder = params[:ldap_auth_username_builder]
 
+        # puts "Initialize >> ldap -> #{@ldap.inspect}"
+        # puts "Initialize >> @attribute-> #{@attribute}"
+
         @group_base = ldap_config["group_base"]
         @check_group_membership = ldap_config.has_key?("check_group_membership") ? ldap_config["check_group_membership"] : ::Devise.ldap_check_group_membership
         @required_groups = ldap_config["required_groups"]
         @required_attributes = ldap_config["require_attribute"]
 
-        @ldap.auth ldap_config["admin_user"], ldap_config["admin_password"] if params[:admin]
+        @ldap.auth ldap_config["admin_user"].to_s, ldap_config["admin_password"].to_s if params[:admin]
+
+        # puts "Initialize >> ldap auth -> #{@ldap.inspect}"
 
         @login = params[:login]
         @password = params[:password]
@@ -142,12 +155,17 @@ module Devise
             value = nil
           end
         else
+          # puts("ldap_param_value >>  Requested #{param.inspect} does not exist for #{@login} with filter #{filter}")
           DeviseLdapAuthenticatable::Logger.send("Requested ldap entry does not exist")
           value = nil
         end
       end
 
       def authenticate!
+        # puts "authenticate! >> ldap auth -> #{@ldap.inspect}"
+        # puts "authenticate! >> dn -> #{dn}"
+        # puts "authenticate! >> @password -> #{@password}"
+        # puts "authenticate! >> auth -> #{@ldap.auth(dn, @password)}"
         @ldap.auth(dn, @password)
         @ldap.bind
       end
@@ -257,9 +275,12 @@ module Devise
       def search_for_login
         DeviseLdapAuthenticatable::Logger.send("LDAP search for login: #{@attribute}=#{@login}")
         filter = Net::LDAP::Filter.eq(@attribute.to_s, @login.to_s)
+        # puts "search_for_login >> filter #{filter}"
+        # puts "search_for_login >> ldap #{@ldap.inspect}"
         ldap_entry = nil
         match_count = 0
         @ldap.search(:filter => filter) {|entry| ldap_entry = entry; match_count+=1}
+        # puts "search_for_login >> ldap_entry #{ldap_entry.inspect}"
         DeviseLdapAuthenticatable::Logger.send("LDAP search yielded #{match_count} matches")
         ldap_entry
       end
@@ -279,6 +300,7 @@ module Devise
 
       def find_ldap_user(ldap)
         DeviseLdapAuthenticatable::Logger.send("Finding user: #{dn}")
+        # puts "find_ldap_user >> \n dn -> #{dn}  ldap #{ldap.inspect}"
         ldap.search(:base => dn, :scope => Net::LDAP::SearchScope_BaseObject).try(:first)
       end
 
